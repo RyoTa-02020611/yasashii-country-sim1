@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OGP画像生成ツール</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #0f172a;
+      color: #fff;
+      font-family: sans-serif;
+    }
+    canvas {
+      border: 1px solid #334155;
+      margin: 10px;
+      background: #1e293b;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #2563eb;
+    }
+    .info {
+      background: #1e293b;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>OGP画像生成ツール</h1>
+  <div class="info">
+    <p>このツールでOGP画像（1200x630）を生成できます。</p>
+    <p>生成後、「OGP画像をダウンロード」ボタンをクリックして、<code>public/ogp.png</code> として保存してください。</p>
+  </div>
+  
+  <div>
+    <h2>OGP画像（1200x630）</h2>
+    <canvas id="canvasOGP" width="1200" height="630"></canvas>
+    <button onclick="downloadOGP()">OGP画像をダウンロード</button>
+  </div>
+
+  <script>
+    function drawOGP(canvas) {
+      const ctx = canvas.getContext('2d');
+      const width = canvas.width;
+      const height = canvas.height;
+      
+      // 背景（紺色グラデーション）
+      const gradient = ctx.createLinearGradient(0, 0, width, height);
+      gradient.addColorStop(0, '#0f172a');
+      gradient.addColorStop(1, '#1e293b');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+      
+      // 装飾的な星のパターン（背景）
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.1)';
+      for (let i = 0; i < 20; i++) {
+        const x = Math.random() * width;
+        const y = Math.random() * height;
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // タイトル
+      ctx.fillStyle = '#fbbf24'; // 金色
+      ctx.font = 'bold 72px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('やさしい国家運営ゲーム', width / 2, height / 2 - 100);
+      
+      // サブタイトル
+      ctx.fillStyle = '#cbd5e1'; // スレート100
+      ctx.font = '36px sans-serif';
+      ctx.fillText('ノヴァリア王国シミュレーション', width / 2, height / 2 - 20);
+      
+      // メーターアイコン（4つ）
+      const icons = ['💰', '👥', '🏠', '💎'];
+      const labels = ['物価', '失業率', '生活', '国庫'];
+      const iconSize = 80;
+      const spacing = 200;
+      const startX = (width - (icons.length - 1) * spacing) / 2;
+      const iconY = height / 2 + 80;
+      
+      icons.forEach((icon, index) => {
+        const x = startX + index * spacing;
+        
+        // アイコン背景（円）
+        ctx.fillStyle = 'rgba(251, 191, 36, 0.2)';
+        ctx.beginPath();
+        ctx.arc(x, iconY, iconSize / 2 + 10, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // アイコン（絵文字は描画できないので、代わりに記号を使用）
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = `${iconSize}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        // 絵文字の代わりに記号を使用
+        const symbols = ['$', 'P', 'H', 'T'];
+        ctx.fillText(symbols[index], x, iconY);
+        
+        // ラベル
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = '24px sans-serif';
+        ctx.fillText(labels[index], x, iconY + iconSize / 2 + 30);
+      });
+      
+      // フッター
+      ctx.fillStyle = 'rgba(203, 213, 225, 0.6)';
+      ctx.font = '20px sans-serif';
+      ctx.fillText('教育用政策シミュレーションゲーム', width / 2, height - 40);
+    }
+    
+    function downloadOGP() {
+      const canvas = document.getElementById('canvasOGP');
+      canvas.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'ogp.png';
+        a.click();
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    }
+    
+    // 初期描画
+    window.onload = () => {
+      drawOGP(document.getElementById('canvasOGP'));
+    };
+  </script>
+</body>
+</html>
+

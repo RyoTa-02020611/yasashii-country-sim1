@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <!-- 背景（紺色グラデーション） -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e293b;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- 背景 -->
+  <rect width="1200" height="630" fill="url(#bgGradient)"/>
+  
+  <!-- 装飾的な星のパターン（背景） -->
+  <g opacity="0.1" fill="#fbbf24">
+    <circle cx="200" cy="150" r="3"/>
+    <circle cx="400" cy="200" r="2"/>
+    <circle cx="800" cy="180" r="3"/>
+    <circle cx="1000" cy="220" r="2"/>
+    <circle cx="300" cy="400" r="2"/>
+    <circle cx="700" cy="450" r="3"/>
+    <circle cx="900" cy="380" r="2"/>
+  </g>
+  
+  <!-- タイトル -->
+  <text x="600" y="250" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#fbbf24" text-anchor="middle" filter="url(#glow)">
+    やさしい国家運営ゲーム
+  </text>
+  
+  <!-- サブタイトル -->
+  <text x="600" y="320" font-family="Arial, sans-serif" font-size="36" fill="#cbd5e1" text-anchor="middle">
+    ノヴァリア王国シミュレーション
+  </text>
+  
+  <!-- メーターアイコン（4つ） -->
+  <g>
+    <!-- 物価 -->
+    <circle cx="300" cy="420" r="50" fill="rgba(251, 191, 36, 0.2)"/>
+    <text x="300" y="430" font-family="Arial, sans-serif" font-size="60" fill="#fbbf24" text-anchor="middle">💰</text>
+    <text x="300" y="500" font-family="Arial, sans-serif" font-size="24" fill="#cbd5e1" text-anchor="middle">物価</text>
+    
+    <!-- 失業率 -->
+    <circle cx="500" cy="420" r="50" fill="rgba(251, 191, 36, 0.2)"/>
+    <text x="500" y="430" font-family="Arial, sans-serif" font-size="60" fill="#fbbf24" text-anchor="middle">👥</text>
+    <text x="500" y="500" font-family="Arial, sans-serif" font-size="24" fill="#cbd5e1" text-anchor="middle">失業率</text>
+    
+    <!-- 生活 -->
+    <circle cx="700" cy="420" r="50" fill="rgba(251, 191, 36, 0.2)"/>
+    <text x="700" y="430" font-family="Arial, sans-serif" font-size="60" fill="#fbbf24" text-anchor="middle">🏠</text>
+    <text x="700" y="500" font-family="Arial, sans-serif" font-size="24" fill="#cbd5e1" text-anchor="middle">生活</text>
+    
+    <!-- 国庫 -->
+    <circle cx="900" cy="420" r="50" fill="rgba(251, 191, 36, 0.2)"/>
+    <text x="900" y="430" font-family="Arial, sans-serif" font-size="60" fill="#fbbf24" text-anchor="middle">💎</text>
+    <text x="900" y="500" font-family="Arial, sans-serif" font-size="24" fill="#cbd5e1" text-anchor="middle">国庫</text>
+  </g>
+  
+  <!-- フッター -->
+  <text x="600" y="590" font-family="Arial, sans-serif" font-size="20" fill="rgba(203, 213, 225, 0.6)" text-anchor="middle">
+    教育用政策シミュレーションゲーム
+  </text>
+</svg>
+

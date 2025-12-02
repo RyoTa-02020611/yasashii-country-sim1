@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>アイコン生成ツール</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background: #0f172a;
+      color: #fff;
+    }
+    canvas {
+      border: 1px solid #334155;
+      margin: 10px;
+      background: #1e293b;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #2563eb;
+    }
+  </style>
+</head>
+<body>
+  <h1>アイコン生成ツール</h1>
+  <p>このHTMLファイルをブラウザで開き、各サイズのアイコンを生成してダウンロードしてください。</p>
+  
+  <div>
+    <h2>192x192 アイコン</h2>
+    <canvas id="canvas192" width="192" height="192"></canvas>
+    <button onclick="downloadIcon(192)">192x192をダウンロード</button>
+  </div>
+  
+  <div>
+    <h2>512x512 アイコン</h2>
+    <canvas id="canvas512" width="512" height="512"></canvas>
+    <button onclick="downloadIcon(512)">512x512をダウンロード</button>
+  </div>
+  
+  <div>
+    <h2>favicon.ico (32x32)</h2>
+    <canvas id="canvas32" width="32" height="32"></canvas>
+    <button onclick="downloadIcon(32)">32x32をダウンロード</button>
+  </div>
+
+  <script>
+    function drawIcon(canvas, size) {
+      const ctx = canvas.getContext('2d');
+      const center = size / 2;
+      
+      // 背景（紺色）
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(0, 0, size, size);
+      
+      // 外側の星（金色）
+      ctx.fillStyle = '#fbbf24';
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = size / 64;
+      
+      ctx.beginPath();
+      const starSize = size * 0.35;
+      for (let i = 0; i < 8; i++) {
+        const angle = (i * Math.PI) / 4 - Math.PI / 2;
+        const x = center + Math.cos(angle) * starSize;
+        const y = center + Math.sin(angle) * starSize;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      
+      // 内側のダイヤモンド（金色）
+      ctx.fillStyle = '#fcd34d';
+      ctx.beginPath();
+      ctx.moveTo(center, center - size * 0.2);
+      ctx.lineTo(center + size * 0.15, center);
+      ctx.lineTo(center, center + size * 0.2);
+      ctx.lineTo(center - size * 0.15, center);
+      ctx.closePath();
+      ctx.fill();
+      
+      // 中心の小さな円（金色）
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(center, center, size * 0.08, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    function downloadIcon(size) {
+      const canvas = document.getElementById(`canvas${size}`);
+      canvas.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = size === 32 ? 'favicon.ico' : `icon-${size}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    }
+    
+    // 初期描画
+    window.onload = () => {
+      drawIcon(document.getElementById('canvas192'), 192);
+      drawIcon(document.getElementById('canvas512'), 512);
+      drawIcon(document.getElementById('canvas32'), 32);
+    };
+  </script>
+</body>
+</html>
+
