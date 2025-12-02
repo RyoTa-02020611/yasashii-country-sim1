@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useGameStore } from '../../store/useGameStore';
 import { buildPlayerSummary } from '../../utils/summary';
 import { advisors } from '../../data/advisors';
-import { MeterType, ScenarioTheme } from '../../types/game';
+import { MeterType, ScenarioTheme, AdvisorId } from '../../types/game';
 import { loadGame } from '../../utils/saveGame';
 
 export default function TeacherDashboard() {

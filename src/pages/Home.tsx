@@ -2,7 +2,7 @@
  * メインゲーム画面
  */
 import { useState, useEffect, useCallback, Suspense, lazy } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useGameStore } from '../store/useGameStore';
 import { shallow } from 'zustand/shallow';
 import { loadGame } from '../utils/saveGame';
@@ -18,10 +18,14 @@ import GuideOverlay from '../components/Tutorial/GuideOverlay';
 
 // 遅延読み込み（React.lazy）
 const ResultScreen = lazy(() => import('../components/Layout/ResultScreen'));
-const TeacherDashboard = lazy(() => import('../components/Dashboard/TeacherDashboard'));
+// Vercel build fix: TeacherDashboardは将来の教師モード機能用（現在は未使用）
+// TODO: 教師モード機能実装時に有効化
+// const TeacherDashboard = lazy(() => import('../components/Dashboard/TeacherDashboard'));
 
 export default function Home() {
-  const [viewMode, setViewMode] = useState<'player' | 'teacher'>('player');
+  // Vercel build fix: viewMode は将来の教師モード機能用に予約（現在は未使用）
+  // TODO: 教師モード機能実装時に有効化
+  // const [viewMode, setViewMode] = useState<'player' | 'teacher'>('player');
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Zustand shallow 比較で必要な state のみ取得
@@ -30,7 +34,6 @@ export default function Home() {
   const currentEvent = useGameStore((state) => state.currentEvent);
   const availablePolicies = useGameStore((state) => state.availablePolicies);
   const advisorMessages = useGameStore((state) => state.advisorMessages, shallow);
-  const currentScenario = useGameStore((state) => state.currentScenario);
   const actionPhase = useGameStore((state) => state.actionPhase);
   const tutorialStep = useGameStore((state) => state.tutorialStep);
   
@@ -111,18 +114,19 @@ export default function Home() {
     );
   }
 
-  // 教師モードの場合はダッシュボードを表示（遅延読み込み）
-  if (phase === 'playing' && viewMode === 'teacher') {
-    return (
-      <AppShell>
-        <div className="bg-slate-900 text-slate-100 min-h-full">
-          <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-slate-300">読み込み中...</div>}>
-            <TeacherDashboard />
-          </Suspense>
-        </div>
-      </AppShell>
-    );
-  }
+  // Vercel build fix: 教師モード機能は将来実装予定（現在は未使用）
+  // TODO: 教師モード機能実装時に有効化
+  // if (phase === 'playing' && viewMode === 'teacher') {
+  //   return (
+  //     <AppShell>
+  //       <div className="bg-slate-900 text-slate-100 min-h-full">
+  //         <Suspense fallback={<div className="flex items-center justify-center min-h-screen text-slate-300">読み込み中...</div>}>
+  //           <TeacherDashboard />
+  //         </Suspense>
+  //       </div>
+  //     </AppShell>
+  //   );
+  // }
 
   // phase === 'playing' のときのゲーム画面（プレイヤーモード）
   return (

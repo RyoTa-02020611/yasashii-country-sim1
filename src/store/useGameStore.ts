@@ -463,8 +463,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // 政策に関連する主なアドバイザーを特定
   findMainAdvisor: (policy: Policy): AdvisorId | null => {
+    // Vercel build fix: policyNameは将来使用予定のためコメントアウト
     // 政策の説明や名前からアドバイザーを推測
-    const policyName = policy.name.toLowerCase();
+    // const policyName = policy.name.toLowerCase();
     const policyDesc = policy.description.toLowerCase();
 
     if (policyDesc.includes('公共事業') || policyDesc.includes('インフラ')) {
@@ -875,9 +876,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         });
       } else if (project.remainingDuration > 0) {
         // 効果が発動中 → 効果を適用し、remainingDurationを減らす
-        effects.unemployment += project.effectsPerTurn.unemployment;
-        effects.treasury += project.effectsPerTurn.treasury;
-        effects.life += project.effectsPerTurn.life;
+        effects.unemployment = (effects.unemployment || 0) + (project.effectsPerTurn.unemployment || 0);
+        effects.treasury = (effects.treasury || 0) + (project.effectsPerTurn.treasury || 0);
+        effects.life = (effects.life || 0) + (project.effectsPerTurn.life || 0);
 
         if (project.remainingDuration > 1) {
           // まだ効果が続く
@@ -1124,6 +1125,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ tutorialStep: null });
     // localStorageに完了フラグを保存
     localStorage.setItem('nova_tutorial_done', 'true');
+  },
+
+  // ========== デバッグ関連 ==========
+  toggleDebugMode: () => {
+    set((state) => ({
+      debugMode: !state.debugMode,
+    }));
+    // 将来的にlocalStorageで保持できるよう、コメントを残しておく
+    // const newMode = !get().debugMode;
+    // localStorage.setItem('nova_debug_mode', String(newMode));
+  },
+
+  addDebugLog: (entry: string) => {
+    const timestamp = new Date().toISOString();
+    const logEntry = `[${timestamp}] ${entry}`;
+    set((state) => ({
+      debugLog: [...state.debugLog.slice(-19), logEntry], // 最新20件を保持
+    }));
   },
 }));
 
