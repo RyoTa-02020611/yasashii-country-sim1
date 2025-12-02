@@ -1,5 +1,5 @@
 // src/components/Tutorial/GuideOverlay.tsx
-import React from "react";
+import React, { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useGameStore } from "../../store/useGameStore";
 
@@ -34,6 +34,22 @@ const GuideOverlay: React.FC = () => {
   const nextTutorialStep = useGameStore((state) => state.nextTutorialStep);
   const endTutorial = useGameStore((state) => state.endTutorial);
 
+  // チュートリアル表示中は背景のスクロールをロックする
+  useEffect(() => {
+    if (tutorialStep) {
+      // スクロールをロック
+      document.body.style.overflow = 'hidden';
+    } else {
+      // スクロールを解除
+      document.body.style.overflow = '';
+    }
+    
+    // クリーンアップ：コンポーネントがアンマウントされたときにスクロールを解除
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [tutorialStep]);
+
   // tutorialStep が null のときは何も表示しない
   if (!tutorialStep) return null;
 
@@ -54,32 +70,63 @@ const GuideOverlay: React.FC = () => {
     <AnimatePresence>
       <motion.div
         key={step}
-        className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4"
+        className="fixed inset-0 z-[100] flex items-center justify-center px-4"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
+        // チュートリアル表示中は背景のスクロールを防ぐ
+        onClick={(e) => {
+          // backdropをクリックしても閉じないようにする（意図しない操作を防ぐ）
+          e.stopPropagation();
+        }}
       >
+        {/* 半透明のbackdrop（背景を暗くする） */}
         <motion.div
-          className="max-w-md w-full rounded-2xl bg-slate-900 text-slate-50 shadow-xl p-4 space-y-3 border border-slate-700"
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 20, opacity: 0 }}
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        />
+        
+        {/* チュートリアルカード本体 */}
+        <motion.div
+          className="relative bg-slate-800/95 backdrop-blur-md rounded-2xl shadow-2xl p-6 md:p-8 max-w-lg w-[90vw] space-y-4 border border-slate-600/50"
+          initial={{ y: 20, opacity: 0, scale: 0.95 }}
+          animate={{ y: 0, opacity: 1, scale: 1 }}
+          exit={{ y: 20, opacity: 0, scale: 0.95 }}
+          transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          onClick={(e) => {
+            // カード内のクリックイベントが伝播しないようにする
+            e.stopPropagation();
+          }}
         >
-          <div className="text-xs font-mono text-sky-300">チュートリアル {step} / 5</div>
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <p className="text-sm leading-relaxed">{body}</p>
+          {/* チュートリアル番号 */}
+          <div className="text-xs font-mono text-sky-300/80 mb-2">
+            チュートリアル {step} / 5
+          </div>
+          
+          {/* タイトル */}
+          <h2 className="text-xl md:text-2xl font-bold text-slate-50 leading-tight">
+            {title}
+          </h2>
+          
+          {/* 本文 */}
+          <p className="text-sm md:text-base leading-relaxed text-slate-200">
+            {body}
+          </p>
 
-          <div className="flex justify-end gap-2 pt-2">
+          {/* ボタンエリア */}
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-700/50">
             <button
               type="button"
-              className="text-xs text-slate-400 hover:text-slate-200 underline"
+              className="text-sm text-slate-400 hover:text-slate-200 underline transition-colors px-2 py-1"
               onClick={endTutorial}
             >
               スキップ
             </button>
             <button
               type="button"
-              className="rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-slate-900 hover:bg-emerald-400"
+              className="rounded-lg bg-emerald-500 px-4 py-2 text-sm md:text-base font-semibold text-slate-900 hover:bg-emerald-400 transition-colors shadow-lg hover:shadow-emerald-500/50"
               onClick={handleNext}
             >
               {nextLabel}

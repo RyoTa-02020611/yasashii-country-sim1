@@ -6,7 +6,7 @@ import { AdvisorId } from '../../types/game';
 import { advisors } from '../../data/advisors';
 
 export default function ReportPanel() {
-  const { turn, history, currentSummary } = useGameStore();
+  const { turn, maxTurns, history, currentSummary } = useGameStore();
 
   // もっとも多く選んだアドバイザーを算出
   const getMostSelectedAdvisor = (): { advisor: AdvisorId | null; count: number } => {
@@ -97,6 +97,17 @@ export default function ReportPanel() {
       <h2 className="text-lg md:text-xl font-bold mb-4 flex items-center gap-2">
         📊 振り返りレポート
       </h2>
+
+      {/* ターン数表示 */}
+      <div className="mb-4 bg-white/5 p-3 rounded border border-blue-400/30">
+        <p className="text-xs md:text-sm font-medium mb-1 text-blue-300">現在のターン数</p>
+        <p className="text-base md:text-lg text-gray-200">
+          ターン {turn} / {maxTurns}
+        </p>
+        <p className="text-xs text-gray-400 mt-1">
+          残り {maxTurns - turn + 1} ターン
+        </p>
+      </div>
 
       {/* 現在ターンのサマリー */}
       <div className="mb-6">

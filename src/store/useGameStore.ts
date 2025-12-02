@@ -2,7 +2,8 @@
  * ゲーム状態管理ストア（Zustand）
  */
 import { create } from 'zustand';
-import { MeterState, GameEvent, Policy, AdvisorMessage, MeterType, MeterEffects, TurnRecord, AdvisorId, GamePhase, Scenario, ScenarioId, GameResultType, ActionType, ActiveIndustryProject, SavedGameState, GuideStep } from '../types/game';
+import { MeterState, GameEvent, Policy, AdvisorMessage, MeterType, MeterEffects, TurnRecord, AdvisorId, GamePhase, Scenario, ScenarioId, GameResultType, ActionType, ActiveIndustryProject, SavedGameState, GuideStep, EndingType, RankType } from '../types/game';
+import { calculateScore, getRankFromScore, getEndingType } from '../utils/evaluation';
 import { events } from '../data/events';
 import { policies } from '../data/policies';
 import { advisorComments } from '../data/advisors';
@@ -11,6 +12,10 @@ import { generatePriceSeries } from '../utils/priceGenerator';
 import { diplomacyOptions } from '../data/diplomacyOptions';
 import { industries } from '../data/industries';
 import { saveGame, loadGame } from '../utils/saveGame';
+import { useTeacherSettingsStore } from './teacherSettingsStore';
+
+// ターン上限（デフォルト値、教師設定で上書き可能）
+const DEFAULT_MAX_TURNS_PER_SCENARIO = 10;
 
 // 初期メーター値（ノヴァリア王国の「普通くらい」の値）
 // 調整ポイント: メーターの上限下限は以下の通り
@@ -53,6 +58,42 @@ const initialMeters: MeterState[] = [
   },
 ];
 
+// ゲーム全体の初期状態を定義（リセット時に使用）
+const initialState = {
+  phase: 'title' as GamePhase,
+  currentScenario: null as Scenario | null,
+  meters: initialMeters.map((m) => ({ ...m })),
+  currentEvent: null as GameEvent | null,
+  availablePolicies: policies,
+  advisorMessages: [] as AdvisorMessage[],
+  turn: 1,
+  maxTurns: DEFAULT_MAX_TURNS_PER_SCENARIO,
+  history: [] as TurnRecord[],
+  currentSummary: '',
+  resultType: null as GameResultType | null,
+  resultMessage: '',
+  endingType: null as EndingType,
+  rank: null as RankType | null,
+  consecutiveLowTreasuryTurns: 0,
+  actionPhase: false,
+  selectedAction: null as ActionType | null,
+  actionLog: [] as string[],
+  debtLevel: 0,
+  reserveUsed: false,
+  etfPrices: [] as number[],
+  etfHolding: 0,
+  activeIndustryProjects: [] as ActiveIndustryProject[],
+  debugMode: false,
+  debugLog: [] as string[],
+  tutorialStep: null as GuideStep | null,
+  support: 50,
+  credit: 50,
+  rigidity: 0,
+  inflationRisk: 0,
+  productivity: 50,
+  futureCost: 0,
+};
+
 interface GameStore {
   // 状態
   phase: GamePhase;
@@ -62,15 +103,23 @@ interface GameStore {
   availablePolicies: Policy[];
   advisorMessages: AdvisorMessage[];
   turn: number;
+  maxTurns: number; // 現在のシナリオの最大ターン数（教師設定で変更可能）
   history: TurnRecord[]; // ターンの履歴
   currentSummary: string; // 直近ターンの振り返りコメント
   resultType: GameResultType | null;
   resultMessage: string;
+  endingType: EndingType; // エンディング種別（'balanced', 'austerity', 'debt_crisis', 'bankruptcy' など）
+  rank: RankType | null; // ランク評価（S/A/B/C）
+  consecutiveLowTreasuryTurns: number; // 連続で国庫残高が-50以下のターン数（早期ゲームオーバー用）
   
   // CFOフェーズ（Action Phase）関連
   actionPhase: boolean; // 政策選択後に true
   selectedAction: ActionType | null;
   actionLog: string[]; // 行ったアクションの記録
+  
+  // CFO財務調整関連
+  debtLevel: number; // 借金レベル（0から開始、国債発行で+1、返済で-1）
+  reserveUsed: boolean; // 予備費取り崩しフラグ（1回だけ使用可能）
   
   // ETF関連
   etfPrices: number[]; // 価格チャート
@@ -106,12 +155,21 @@ interface GameStore {
   applyPolicy: (policyId: string) => void;
   endTurnAndCheckScenario: () => void;
   resetGame: () => void;
+  resetToTitle: () => void; // バグ修正：タイトル画面に戻る専用関数
+  resetAllAndGoHome: () => void; // ゲーム全体を初期化してタイトルに戻る
+  restartCurrentChapter: () => void; // 現在の章だけリセットして続きから遊ぶ
   
   // CFOフェーズ関連アクション
   startActionPhase: () => void;
   selectAction: (action: ActionType) => void;
   executeAction: () => void;
   endActionPhase: () => void;
+  
+  // CFO財務調整アクション
+  executeCFOAction: (action: 'issue_bond' | 'repay_bond' | 'use_reserve' | 'skip') => void;
+  
+  // ホーム画面への遷移
+  goHome: () => void;
   
   // ETF関連アクション
   initializeETF: () => void;
@@ -150,45 +208,22 @@ interface GameStore {
   applyEffects: (effects: MeterEffects, applyScenarioBonus?: boolean) => void;
   generateSummary: (beforeMeters: MeterState[], afterMeters: MeterState[], policy: Policy) => string;
   findMainAdvisor: (policy: Policy) => AdvisorId | null;
+  calculateRank: () => { rank: RankType; endingType: EndingType; message: string };
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
-    // 初期状態
-    phase: 'title',
-    currentScenario: null,
-    meters: initialMeters,
-    currentEvent: null,
-    availablePolicies: policies,
-    advisorMessages: [],
-    turn: 1,
-    history: [],
-    currentSummary: '',
-    resultType: null,
-    resultMessage: '',
-    actionPhase: false,
-    selectedAction: null,
-    actionLog: [],
-    etfPrices: [],
-    etfHolding: 0,
-    activeIndustryProjects: [],
-    debugMode: false, // デバッグモード（初期値はfalse、将来的にlocalStorageで保持可能）
-    debugLog: [],
-    tutorialStep: null, // チュートリアルステップ（初期値はnull）
-    
-    // 隠しメーター（緊急融資イベント用）
-    support: 50,  // 支持率（初期値: 50）
-    credit: 50,   // 信用度（初期値: 50）
-    rigidity: 0,   // 財政硬直度（初期値: 0）
-    
-    // 金融政策用の隠しメーター
-    inflationRisk: 0,   // インフレリスク（初期値: 0）
-    productivity: 50,   // 生産性（初期値: 50）
-    futureCost: 0,      // 将来コスト（初期値: 0）
+    // 初期状態（initialStateを使用）
+    ...initialState,
 
     // シナリオを開始する
   startScenario: (scenarioId: ScenarioId) => {
     const scenario = scenarios.find((s) => s.id === scenarioId);
     if (!scenario) return;
+
+    // 教師設定からターン数を取得（カスタム値があればそれ、なければシナリオのデフォルト値）
+    const teacherSettings = useTeacherSettingsStore.getState();
+    const customTurns = teacherSettings.getTurnsForChapter(scenarioId);
+    const maxTurns = customTurns ?? scenario.maxTurns;
 
     // メーター・イベント・履歴を初期状態にリセット
     set({
@@ -197,10 +232,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       availablePolicies: policies,
       advisorMessages: [],
       turn: 1,
+      maxTurns: maxTurns, // 教師設定またはシナリオのデフォルト値を使用
       history: [],
       currentSummary: '',
       resultType: null,
       resultMessage: '',
+      endingType: null,
+      rank: null,
+      consecutiveLowTreasuryTurns: 0,
       currentScenario: scenario,
       phase: 'playing',
     });
@@ -273,11 +312,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   // 選んだ政策に応じてメーターの値を変える
+  // 同じ政策でもターンを進める処理：同じ政策を選んでも必ず処理が進むように実装
   applyPolicy: (policyId: string) => {
     const policy = policies.find((p) => p.id === policyId);
     if (!policy) return;
 
     const state = get();
+    
+    // 同じ政策を選んだ場合でも処理を続行（早期リターンなし）
+    // 同じ政策を続けるという戦略も有効にするため、必ず効果を適用しターンを進める
     
     // 適用前のメーター状態をコピー（スナップショット）
     const beforeMeters: MeterState[] = state.meters.map((m) => ({
@@ -285,7 +328,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       value: m.value,
     }));
 
-    // 政策の効果を適用
+    // 政策の効果を適用（同じ政策でも必ず適用）
     if (policy.effects) {
       get().applyEffects(policy.effects);
     }
@@ -324,14 +367,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
     });
 
-    // 履歴に追加して状態を更新
+    // 履歴に追加して状態を更新（同じ政策でも必ず履歴に追加）
     set({
       advisorMessages: messages,
       history: [...state.history, turnRecord],
       currentSummary: summary,
     });
 
-    // 政策適用後、CFOフェーズ（Action Phase）を開始
+    // 政策適用後、CFOフェーズ（Action Phase）を開始（同じ政策でも必ずCFOフェーズに進む）
     get().startActionPhase();
 
     // オートセーブ
@@ -484,6 +527,46 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
   },
 
+  // ランク判定関数（ターン終了時のクリア条件）
+  // 評価ロジック共通化：共通のevaluation.tsを使用して一貫した評価を提供
+  calculateRank: (): { rank: RankType; endingType: EndingType; message: string } => {
+    const state = get();
+    
+    // 共通の評価ロジックを使用
+    const score = calculateScore(state.meters);
+    const rank = getRankFromScore(score);
+    const endingType = getEndingType(state.meters) || 'balanced';
+    
+    // 現在のシナリオの最大ターン数を使用（教師設定で変更可能）
+    const maxTurns = state.maxTurns;
+    
+    // メッセージをランクに応じて生成（ターン数を動的に表示）
+    let message = '';
+    switch (rank) {
+      case 'S':
+        message = `${maxTurns}ターンの国家運営が終了しました。優秀な統治により、ノヴァリアは繁栄の道を歩んでいます。`;
+        break;
+      case 'A':
+        message = `${maxTurns}ターンの国家運営が終了しました。バランスの取れた政策により、ノヴァリアは安定した発展を続けています。`;
+        break;
+      case 'B':
+        message = `${maxTurns}ターンの国家運営が終了しました。一部の指標に改善の余地がありますが、ノヴァリアは危機を乗り越えました。`;
+        break;
+      case 'C':
+        message = `${maxTurns}ターンの国家運営が終了しました。財政の悪化や生活の質の低下により、ノヴァリアには課題が残りました。`;
+        break;
+      case 'D':
+        message = `${maxTurns}ターンの国家運営が終了しました。深刻な問題が残り、ノヴァリアの未来は不透明です。`;
+        break;
+    }
+    
+    return {
+      rank,
+      endingType: endingType as EndingType,
+      message,
+    };
+  },
+
   // ターン終了とシナリオ条件チェック
   endTurnAndCheckScenario: () => {
     const state = get();
@@ -497,7 +580,65 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // ターンをインクリメント
     const newTurn = state.turn + 1;
 
-    // 失敗条件をチェック
+    // ========== 早期ゲームオーバー（財政破綻エンディング）のチェック ==========
+    // 国庫残高が-50以下の状態が3ターン連続で続いたら、即座に「財政破綻エンディング」に遷移
+    const treasuryMeter = state.meters.find((m) => m.id === 'treasury');
+    const treasury = treasuryMeter?.value ?? 0;
+    
+    let newConsecutiveLowTreasuryTurns = state.consecutiveLowTreasuryTurns;
+    if (treasury <= -50) {
+      newConsecutiveLowTreasuryTurns += 1;
+    } else {
+      newConsecutiveLowTreasuryTurns = 0; // リセット
+    }
+
+    if (newConsecutiveLowTreasuryTurns >= 3) {
+      set({
+        phase: 'result',
+        resultType: 'bankruptcy',
+        resultMessage: '財政破綻エンディング：国庫残高が-50以下の状態が3ターン連続で続きました。ノヴァリアは財政破綻に陥りました…',
+        endingType: 'bankruptcy',
+        rank: 'C',
+        turn: newTurn,
+        consecutiveLowTreasuryTurns: newConsecutiveLowTreasuryTurns,
+      });
+      
+      // デバッグログに記録
+      const finalState = get();
+      if (typeof finalState.addDebugLog === 'function') {
+        finalState.addDebugLog(`[財政破綻エンディング] 国庫残高: ${treasury}, 連続ターン数: ${newConsecutiveLowTreasuryTurns}`);
+      }
+      
+      return;
+    }
+
+    // ========== ターン上限のチェック（教師設定で変更可能） ==========
+    // 現在のシナリオの最大ターン数に達したら、自動的に結果画面へ遷移
+    const currentMaxTurns = state.maxTurns;
+    if (newTurn > currentMaxTurns) {
+      // ランク判定を実行
+      const rankResult = get().calculateRank();
+      
+      set({
+        phase: 'result',
+        resultType: 'clear',
+        resultMessage: rankResult.message,
+        endingType: rankResult.endingType,
+        rank: rankResult.rank,
+        turn: currentMaxTurns, // 最大ターン数に設定（教師設定で変更可能）
+        consecutiveLowTreasuryTurns: newConsecutiveLowTreasuryTurns,
+      });
+      
+      // デバッグログに記録
+      const finalState = get();
+      if (typeof finalState.addDebugLog === 'function') {
+        finalState.addDebugLog(`[${currentMaxTurns}ターン終了] ランク: ${rankResult.rank}, エンディング: ${rankResult.endingType}`);
+      }
+      
+      return;
+    }
+
+    // 失敗条件をチェック（既存のロジック）
     if (scenario.failCondition) {
       const { meter, threshold, direction, message } = scenario.failCondition;
       const meterState = state.meters.find((m) => m.id === meter);
@@ -513,6 +654,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             resultType: 'fail',
             resultMessage: message,
             turn: newTurn,
+            consecutiveLowTreasuryTurns: newConsecutiveLowTreasuryTurns,
           });
           return;
         }
@@ -554,31 +696,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
           resultType: 'fail',
           resultMessage: `複数の指標が危険ゾーンに達しました（${dangerZones.join('、')}）。ノヴァリアは危機を乗り越えられませんでした…`,
           turn: newTurn,
+          consecutiveLowTreasuryTurns: newConsecutiveLowTreasuryTurns,
         });
         return;
       }
     }
 
-    // maxTurnsに到達したらクリア
-    if (newTurn > scenario.maxTurns) {
-      set({
-        phase: 'result',
-        resultType: 'clear',
-        resultMessage: `${scenario.title}をクリアしました！ノヴァリア王国は危機を乗り越えました。`,
-        turn: newTurn,
-      });
-      return;
-    }
+    // ターンを進める（連続低国庫ターン数も更新）
+    set({ 
+      turn: newTurn,
+      consecutiveLowTreasuryTurns: newConsecutiveLowTreasuryTurns,
+    });
 
-    // ターンを進める
-    set({ turn: newTurn });
+    // 次のイベントを生成（ターンが進んだので、次のターンのイベントを生成する）
+    get().nextEvent();
 
     // ========== 緊急融資イベント（Bailout）の自動発動 ==========
     // 財政がマイナスになった場合、自動で緊急融資イベントを発生させる
     const currentStateAfterTurn = get();
-    const treasuryMeter = currentStateAfterTurn.meters.find((m) => m.id === 'treasury');
+    const treasuryMeterForBailout = currentStateAfterTurn.meters.find((m) => m.id === 'treasury');
     
-    if (treasuryMeter && treasuryMeter.value < 0) {
+    if (treasuryMeterForBailout && treasuryMeterForBailout.value < 0) {
       // 緊急融資イベントの効果を適用
       // 国庫に +40 追加
       get().applyEffects({ treasury: 40 });
@@ -597,7 +735,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       
       // デバッグログに記録（安全に呼び出す）
       if (typeof finalState.addDebugLog === 'function') {
-        finalState.addDebugLog(`[緊急融資] 国庫: ${treasuryMeter.value} → ${treasuryMeter.value + 40}, 支持率: ${updatedState.support} → ${finalState.support}, 信用度: ${updatedState.credit} → ${finalState.credit}, 硬直度: ${updatedState.rigidity} → ${finalState.rigidity}`);
+        finalState.addDebugLog(`[緊急融資] 国庫: ${treasuryMeterForBailout.value} → ${treasuryMeterForBailout.value + 40}, 支持率: ${updatedState.support} → ${finalState.support}, 信用度: ${updatedState.credit} → ${finalState.credit}, 硬直度: ${updatedState.rigidity} → ${finalState.rigidity}`);
       }
     }
     // ========== 緊急融資イベント処理終了 ==========
@@ -675,6 +813,122 @@ export const useGameStore = create<GameStore>((set, get) => ({
       actionPhase: false,
       selectedAction: null,
     });
+  },
+
+  // CFO財務調整アクションを実行
+  executeCFOAction: (action: 'issue_bond' | 'repay_bond' | 'use_reserve' | 'skip') => {
+    const state = get();
+    
+    switch (action) {
+      case 'issue_bond': {
+        // 国債を発行する（借金でまかなう）
+        // 今ターン：国庫残高 +20、debtLevel +1
+        get().applyEffects({ treasury: 20 });
+        set({
+          debtLevel: Math.max(0, state.debtLevel + 1),
+          actionLog: [...state.actionLog, '国債を発行しました（国庫 +20, 借金レベル +1）。'],
+        });
+        
+        // デバッグログに記録
+        const currentState = get();
+        if (typeof currentState.addDebugLog === 'function') {
+          currentState.addDebugLog(`[CFO財務調整] 国債発行: 国庫 +20, 借金レベル ${state.debtLevel} → ${currentState.debtLevel}`);
+        }
+        break;
+      }
+      
+      case 'repay_bond': {
+        // 国債を返済する（借金を減らす）
+        // 今ターン：国庫残高 -15、debtLevel -1（0未満にならないように）
+        if (state.debtLevel > 0) {
+          get().applyEffects({ treasury: -15 });
+          set({
+            debtLevel: Math.max(0, state.debtLevel - 1),
+            actionLog: [...state.actionLog, '国債を返済しました（国庫 -15, 借金レベル -1）。'],
+          });
+          
+          // デバッグログに記録
+          const currentState = get();
+          if (typeof currentState.addDebugLog === 'function') {
+            currentState.addDebugLog(`[CFO財務調整] 国債返済: 国庫 -15, 借金レベル ${state.debtLevel} → ${currentState.debtLevel}`);
+          }
+        } else {
+          // 借金がない場合は何もしない
+          set({
+            actionLog: [...state.actionLog, '返済する国債がありません。'],
+          });
+        }
+        break;
+      }
+      
+      case 'use_reserve': {
+        // 予備費を取り崩す（1回だけ）
+        // 国庫残高 +10、reserveUsed = true
+        if (!state.reserveUsed) {
+          get().applyEffects({ treasury: 10 });
+          set({
+            reserveUsed: true,
+            actionLog: [...state.actionLog, '予備費を取り崩しました（国庫 +10）。'],
+          });
+          
+          // デバッグログに記録
+          const currentState = get();
+          if (typeof currentState.addDebugLog === 'function') {
+            currentState.addDebugLog(`[CFO財務調整] 予備費取り崩し: 国庫 +10, reserveUsed: true`);
+          }
+        } else {
+          // 既に使用済みの場合は何もしない
+          set({
+            actionLog: [...state.actionLog, '予備費は既に取り崩し済みです。'],
+          });
+        }
+        break;
+      }
+      
+      case 'skip': {
+        // 何もしない
+        set({
+          actionLog: [...state.actionLog, '財務調整を行いませんでした。'],
+        });
+        
+        // デバッグログに記録
+        const currentState = get();
+        if (typeof currentState.addDebugLog === 'function') {
+          currentState.addDebugLog(`[CFO財務調整] スキップ`);
+        }
+        break;
+      }
+    }
+    
+    // CFOフェーズを終了してホーム画面に戻る
+    get().endActionPhase();
+    
+    // 同じ政策でもターンを必ず進める処理：CFOフェーズ終了時に自動的にターンを進める
+    // これにより、政策選択→CFOフェーズ→自動的にターン進行の流れが確実になる
+    // endTurnAndCheckScenario()を呼ぶことで、ターンが+1され、次のイベントも自動生成される
+    get().endTurnAndCheckScenario();
+    
+    // オートセーブ
+    saveGame(get().toSavedState());
+  },
+
+  // ホーム画面への遷移（どの画面からでも戻れる）
+  goHome: () => {
+    const state = get();
+    
+    // 開いているモーダルやミニゲーム画面を閉じる
+    // ホームボタンでホームに戻る処理：phaseを'playing'に設定してメインゲーム画面に戻る
+    set({
+      phase: 'playing', // メインゲーム画面（Home.tsx）を表示するためにphaseを'playing'に設定
+      actionPhase: false, // CFOフェーズを閉じる
+      selectedAction: null, // 選択中のアクションをクリア
+      // debugModeは保持（ユーザーが意図的にONにした場合は維持）
+    });
+    
+    // デバッグログに記録
+    if (typeof state.addDebugLog === 'function') {
+      state.addDebugLog(`[ナビゲーション] ホーム画面に戻りました`);
+    }
   },
 
   // 市民調査アクションを記録
@@ -908,11 +1162,50 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
-  // ゲームを最初の状態に戻す
+  // ゲームを最初の状態に戻す（initialStateを使用）
   resetGame: () => {
     set({
+      ...initialState,
       phase: 'title',
-      currentScenario: null,
+    });
+    
+    // セーブデータもクリアして、次回起動時に古い状態が復元されないようにする
+    try {
+      localStorage.removeItem('nova-nation-game-save');
+    } catch (e) {
+      // localStorageが無効な場合は無視
+    }
+  },
+  
+  // バグ修正：タイトル画面に戻る専用関数（エンディング画面から「ホームへ」を押したときに使用）
+  resetToTitle: () => {
+    // resetGame()と同じ処理だが、明示的に「タイトルに戻る」ことを示す
+    get().resetGame();
+    
+    // デバッグログに記録
+    const state = get();
+    if (typeof state.addDebugLog === 'function') {
+      state.addDebugLog(`[ナビゲーション] タイトル画面に戻りました（ゲーム状態をリセット）`);
+    }
+  },
+  
+  // ゲーム全体を初期化してタイトルに戻る（resetToTitleのエイリアスとして使用）
+  resetAllAndGoHome: () => {
+    get().resetToTitle();
+  },
+  
+  // 現在の章だけリセットして続きから遊ぶ（同じ章を再開する）
+  restartCurrentChapter: () => {
+    const state = get();
+    const scenario = state.currentScenario;
+    
+    if (!scenario) {
+      // シナリオが開始されていない場合は何もしない
+      return;
+    }
+    
+    // 章開始時の状態にリセット（シナリオは保持）
+    set({
       meters: initialMeters.map((m) => ({ ...m })),
       currentEvent: null,
       availablePolicies: policies,
@@ -922,9 +1215,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentSummary: '',
       resultType: null,
       resultMessage: '',
+      endingType: null,
+      rank: null,
+      consecutiveLowTreasuryTurns: 0,
       actionPhase: false,
       selectedAction: null,
       actionLog: [],
+      debtLevel: 0,
+      reserveUsed: false,
       etfPrices: [],
       etfHolding: 0,
       activeIndustryProjects: [],
@@ -938,7 +1236,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
       inflationRisk: 0,
       productivity: 50,
       futureCost: 0,
+      phase: 'playing', // ゲーム画面に戻る
     });
+    
+    // シナリオを再開始（最初のイベントを生成）
+    get().startScenario(scenario.id);
+    
+    // デバッグログに記録
+    const finalState = get();
+    if (typeof finalState.addDebugLog === 'function') {
+      finalState.addDebugLog(`[ナビゲーション] 同じ章を再開しました: ${scenario.id}`);
+    }
   },
 
   // 現在のストア状態をSavedGameStateに変換
@@ -987,6 +1295,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       inflationRisk: saved.inflationRisk ?? 0,
       productivity: saved.productivity ?? 50,
       futureCost: saved.futureCost ?? 0,
+      // CFO財務調整関連（後方互換性のため、デフォルト値を設定）
+      debtLevel: saved.debtLevel ?? 0,
+      reserveUsed: saved.reserveUsed ?? false,
       // その他の状態は初期値のまま（必要に応じて追加）
       currentEvent: null,
       availablePolicies: policies,

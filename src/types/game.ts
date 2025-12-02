@@ -80,7 +80,13 @@ export type ScenarioId =
   | 'final';
 
 // ゲーム結果の種類
-export type GameResultType = 'clear' | 'fail';
+export type GameResultType = 'clear' | 'fail' | 'bankruptcy';
+
+// エンディング種別
+export type EndingType = 'balanced' | 'austerity' | 'debt_crisis' | 'bankruptcy' | null;
+
+// ランク評価
+export type RankType = 'S' | 'A' | 'B' | 'C' | 'D';
 
 // 失敗条件
 export interface FailCondition {
@@ -176,5 +182,8 @@ export interface SavedGameState {
   inflationRisk?: number;  // インフレリスク（0-100）
   productivity?: number;    // 生産性（0-100）
   futureCost?: number;      // 将来コスト（累積値）
+  // CFO財務調整関連（オプション、後方互換性のため）
+  debtLevel?: number;      // 借金レベル（0から開始）
+  reserveUsed?: boolean;   // 予備費取り崩しフラグ
 }
 

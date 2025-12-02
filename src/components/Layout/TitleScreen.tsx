@@ -3,12 +3,14 @@
  */
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../../store/useGameStore';
 import { scenarios } from '../../data/scenarios';
 import { ScenarioTheme } from '../../types/game';
 import { loadGame, clearSavedGame } from '../../utils/saveGame';
 
 export default function TitleScreen() {
+  const navigate = useNavigate();
   // Zustand shallow 比較で必要な関数のみ取得
   const startScenario = useGameStore((state) => state.startScenario);
   const hydrateFromSavedState = useGameStore((state) => state.hydrateFromSavedState);
@@ -168,6 +170,17 @@ export default function TitleScreen() {
           >
             もう一度チュートリアルを見直す
           </button>
+          
+          {/* 教師モードボタン */}
+          <div className="mt-6 pt-6 border-t border-slate-700">
+            <button
+              onClick={() => navigate('/teacher')}
+              className="w-full px-6 py-3 bg-purple-600/20 hover:bg-purple-600/30 rounded-lg text-base font-semibold text-purple-300 border border-purple-400/50 transition-all flex items-center justify-center gap-2"
+            >
+              <span>👩‍🏫</span>
+              <span>教師モード</span>
+            </button>
+          </div>
         </div>
 
         {/* 章選択 */}

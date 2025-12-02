@@ -7,6 +7,7 @@ import { useGameStore } from '../../store/useGameStore';
 import { AdvisorId, ScenarioTheme, MeterType } from '../../types/game';
 import { advisors } from '../../data/advisors';
 import { policies } from '../../data/policies';
+import { calculateScore, getRankFromScore, getEndingType, getRankLabel } from '../../utils/evaluation';
 
 // カウントアップアニメーション用のカスタムフック
 function useCountUp(targetValue: number, duration: number = 1000): number {
@@ -54,9 +55,25 @@ export default function ResultScreen() {
     currentScenario,
     startScenario,
     resetGame,
+    resetToTitle, // バグ修正：タイトル画面に戻る専用関数
+    resetAllAndGoHome, // ゲーム全体を初期化してタイトルに戻る
+    restartCurrentChapter, // 現在の章だけリセットして続きから遊ぶ
     actionLog,
     meters,
+    endingType,
+    rank: storeRank, // useGameStoreから取得したrank（共通ロジックで計算済み）
+    turn,
+    maxTurns,
   } = useGameStore();
+  
+  // 評価ロジック共通化：共通のevaluation.tsを使用して一貫した評価を提供
+  // storeRankが存在する場合はそれを使用、ない場合は共通ロジックで計算
+  const finalMeters = history.length > 0 ? (history[history.length - 1]?.afterMeters || meters) : meters;
+  const score = calculateScore(finalMeters);
+  // storeRankが存在する場合はそれを使用（10ターン終了時にcalculateRankで計算済み）
+  // ない場合は共通ロジックで計算（早期ゲームオーバーなど）
+  const calculatedRank = storeRank || getRankFromScore(score);
+  const calculatedEndingType = endingType || getEndingType(finalMeters) || 'balanced';
 
   // もっとも多く選んだアドバイザーを算出
   const getMostSelectedAdvisor = (): { advisor: AdvisorId | null; count: number } => {
@@ -420,56 +437,17 @@ export default function ResultScreen() {
   const endingNarrative = getEndingNarrative();
 
   // ========== 総合スコア表示 ==========
-  const getOverallScore = (): { score: number; rank: 'S' | 'A' | 'B' | 'C'; label: string; color: string } => {
+  // 評価ロジック共通化：共通のevaluation.tsを使用して一貫した評価を提供
+  // calculatedRankとcalculatedEndingTypeを使用して、すべての評価表示を統一
+  const getOverallScore = (): { score: number; rank: 'S' | 'A' | 'B' | 'C' | 'D'; label: string; color: string } => {
     if (history.length === 0) {
       return { score: 0, rank: 'C', label: '評価なし', color: 'text-gray-400' };
     }
 
-    const finalMeters = history[history.length - 1]?.afterMeters || meters;
-    
-    // 各メーターのスコアを計算（0-100）
-    const meterScores = finalMeters.map((meter) => {
-      let score = 0;
-      if (meter.id === 'price' || meter.id === 'unemployment') {
-        // 物価と失業率は低い方が良い（逆転）
-        score = 100 - meter.value;
-      } else {
-        // 生活と国庫は高い方が良い
-        score = meter.value;
-      }
-      // 国庫は負の値もあるので調整
-      if (meter.id === 'treasury' && meter.value < 0) {
-        score = Math.max(0, 50 + meter.value); // -50以下で0、0で50
-      }
-      return score;
-    });
+    // 共通の評価ロジックを使用（calculatedRankと統一）
+    const rankInfo = getRankLabel(calculatedRank);
 
-    const averageScore = meterScores.reduce((sum, s) => sum + s, 0) / meterScores.length;
-
-    let rank: 'S' | 'A' | 'B' | 'C';
-    let label: string;
-    let color: string;
-
-    // すべてのメーターが80以上 → S
-    if (meterScores.every((s) => s >= 80)) {
-      rank = 'S';
-      label = '優秀';
-      color = 'text-yellow-400';
-    } else if (averageScore >= 70) {
-      rank = 'A';
-      label = '良好';
-      color = 'text-green-400';
-    } else if (averageScore >= 60) {
-      rank = 'B';
-      label = '普通';
-      color = 'text-blue-400';
-    } else {
-      rank = 'C';
-      label = '要改善';
-      color = 'text-red-400';
-    }
-
-    return { score: Math.round(averageScore), rank, label, color };
+    return { score, rank: calculatedRank, label: rankInfo.label, color: rankInfo.color };
   };
 
   const overallScore = getOverallScore();
@@ -493,14 +471,14 @@ export default function ResultScreen() {
     treasury: '国庫残高',
   };
 
+  // 同じ章でもう一度遊ぶ（現在の章だけリセットして再開）
   const handleRetry = () => {
-    if (currentScenario) {
-      startScenario(currentScenario.id);
-    }
+    restartCurrentChapter();
   };
 
+  // 最初からやり直す（ゲーム全体を初期化してタイトルに戻る）
   const handleBackToTitle = () => {
-    resetGame();
+    resetAllAndGoHome();
   };
 
   return (
@@ -526,10 +504,80 @@ export default function ResultScreen() {
 
         {/* 結果メッセージ */}
         <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 md:p-8 border border-white/20">
-          <p className="text-base md:text-lg text-gray-200 leading-relaxed text-center">
+          <p className="text-base md:text-lg text-gray-200 leading-relaxed text-center mb-4">
             {resultMessage}
           </p>
+          
+          {/* ランク表示 */}
+          {/* 評価ロジック共通化：共通のevaluation.tsで計算したrankを使用 */}
+          {calculatedRank && (
+            <div className="mt-4 text-center">
+              <p className="text-sm text-gray-400 mb-2">最終評価</p>
+              <div className={`text-4xl md:text-5xl font-bold ${getRankLabel(calculatedRank).color}`}>
+                {calculatedRank}ランク
+              </div>
+            </div>
+          )}
+          
+          {/* エンディング種別 */}
+          {/* 評価ロジック共通化：共通のevaluation.tsで計算したendingTypeを使用 */}
+          {calculatedEndingType && (
+            <div className="mt-4 text-center">
+              <p className="text-xs text-gray-400">
+                {calculatedEndingType === 'balanced' && 'バランス型エンディング'}
+                {calculatedEndingType === 'austerity' && '緊縮型エンディング'}
+                {calculatedEndingType === 'debt_crisis' && '債務危機エンディング'}
+                {calculatedEndingType === 'bankruptcy' && '財政破綻エンディング'}
+              </p>
+            </div>
+          )}
         </div>
+
+        {/* メーターの最終値 */}
+        {meters.length > 0 && (
+          <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 md:p-8 border border-white/20">
+            <h2 className="text-lg md:text-xl font-semibold text-blue-300 mb-4">
+              最終メーター値
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              {meters.map((meter) => {
+                const isGood = (meter.id === 'price' || meter.id === 'unemployment') 
+                  ? meter.value <= 50 
+                  : meter.value >= 50;
+                const isBad = (meter.id === 'price' || meter.id === 'unemployment')
+                  ? meter.value >= 70
+                  : meter.value <= 30;
+                
+                return (
+                  <div key={meter.id} className="bg-white/5 p-3 rounded">
+                    <p className="text-xs text-gray-400 mb-1">{meter.label}</p>
+                    <p className={`text-lg font-bold ${
+                      isGood ? 'text-green-400' :
+                      isBad ? 'text-red-400' :
+                      'text-gray-200'
+                    }`}>
+                      {meter.value}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {meter.id === 'treasury' && meter.value < 0 && '財政赤字'}
+                      {meter.id === 'treasury' && meter.value >= 0 && meter.value < 50 && '財政不安定'}
+                      {meter.id === 'treasury' && meter.value >= 50 && '財政健全'}
+                      {meter.id === 'life' && meter.value < 30 && '生活困窮'}
+                      {meter.id === 'life' && meter.value >= 30 && meter.value < 50 && '生活普通'}
+                      {meter.id === 'life' && meter.value >= 50 && '生活良好'}
+                      {meter.id === 'price' && meter.value > 70 && '物価高騰'}
+                      {meter.id === 'price' && meter.value <= 70 && meter.value > 40 && '物価普通'}
+                      {meter.id === 'price' && meter.value <= 40 && '物価安定'}
+                      {meter.id === 'unemployment' && meter.value > 70 && '失業深刻'}
+                      {meter.id === 'unemployment' && meter.value <= 70 && meter.value > 30 && '失業普通'}
+                      {meter.id === 'unemployment' && meter.value <= 30 && '失業改善'}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* 簡単なまとめ */}
         {history.length > 0 && (
@@ -567,7 +615,9 @@ export default function ResultScreen() {
               className="bg-white/5 p-3 rounded"
             >
               <p className="text-sm md:text-base font-medium mb-1">プレイしたターン数</p>
-              <p className="text-base md:text-lg text-gray-200">{displayTurnCount}ターン</p>
+              <p className="text-base md:text-lg text-gray-200">
+                {turn - 1}ターン / {maxTurns}ターン
+              </p>
             </motion.div>
 
             {/* もっとも多く選んだアドバイザー */}
@@ -679,6 +729,7 @@ export default function ResultScreen() {
               </h2>
             </div>
             <div className="flex items-center gap-4">
+              {/* 評価ロジック共通化：共通のevaluation.tsで計算したrankを使用（overallScore.rankと統一） */}
               <div className={`text-5xl md:text-6xl font-bold ${overallScore.color}`}>
                 {overallScore.rank}
               </div>

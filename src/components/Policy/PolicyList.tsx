@@ -14,9 +14,12 @@ export default function PolicyList({ policies, onSelect }: PolicyListProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // コールバック関数を useCallback で最適化
+  // 同じ政策でもターンを進める処理：同じ政策を選んでも必ずonSelectが呼ばれるようにする
   const handleSelect = useCallback((policyId: string) => {
-    setSelectedId(policyId);
+    // 同じ政策を選んだ場合でも、必ずonSelectを呼び出す（ターンを進めるため）
     onSelect(policyId);
+    // selectedIdはUI表示用なので、同じ政策でも更新する（視覚的フィードバックのため）
+    setSelectedId(policyId);
   }, [onSelect]);
 
   if (policies.length === 0) {

@@ -12,7 +12,7 @@ interface AppShellProps {
 }
 
 export default function AppShell({ children }: AppShellProps) {
-  const { currentScenario, phase, debugMode, toggleDebugMode } = useGameStore();
+  const { currentScenario, phase, debugMode, toggleDebugMode, goHome } = useGameStore();
   const [showTutorial, setShowTutorial] = useState(false);
   const [isFirstVisit, setIsFirstVisit] = useState(false);
 
@@ -59,7 +59,11 @@ export default function AppShell({ children }: AppShellProps) {
       <header className="bg-slate-800 border-b border-slate-700 px-4 md:px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <h1 className="text-xl md:text-2xl font-bold text-slate-100">
+            <h1 
+              className="text-xl md:text-2xl font-bold text-slate-100 cursor-pointer hover:text-blue-300 transition-colors"
+              onClick={goHome}
+              title="ホーム画面に戻る"
+            >
               🌍 やさしい国家運営ゲーム
             </h1>
             {currentScenario && phase === 'playing' && (
@@ -69,7 +73,17 @@ export default function AppShell({ children }: AppShellProps) {
             )}
           </div>
           <div className="flex items-center gap-4">
-            {/* モード表示は各画面で管理 */}
+            {/* ホームへ戻るボタン（どの画面からでも表示） */}
+            {(phase === 'playing' || phase === 'result') && (
+              <button
+                onClick={goHome}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-white text-sm md:text-base font-medium"
+                title="ホーム画面に戻る"
+              >
+                <span>🏠</span>
+                <span className="hidden md:inline">ホームへ</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
