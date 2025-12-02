@@ -1,12 +1,8 @@
 {
-  "version": 2,
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "routes": [
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/((?!assets|manifest.json|icon-.*\\.png|.*\\.svg|.*\\.ico|favicon\\.ico|.*\\.js|.*\\.css).*)",
+      "destination": "/index.html"
     }
   ]
 }
-
